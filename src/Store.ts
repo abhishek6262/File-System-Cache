@@ -1,43 +1,47 @@
-import fs from "fs";
+import { Context } from "./Context";
+
+export interface StoreOptions {
+  context: {
+    directory: string;
+    filename: string;
+  };
+  ttl?: number;
+}
 
 export class Store {
-  constructor(private context: string, private ttl: number) {
-    if (!fs.existsSync(context)) fs.writeFileSync(context, JSON.stringify({}));
+  private context: Context;
+
+  constructor(
+    context: StoreOptions["context"],
+    private ttl: StoreOptions["ttl"] = 5000
+  ) {
+    this.context = new Context(context.directory, context.filename);
   }
 
   delete(key: string) {
-    let res = JSON.parse(fs.readFileSync(this.context, "utf-8"));
+    const res = this.context.get();
 
-    if (res[key]) {
-      delete res[key];
-      fs.writeFileSync(this.context, JSON.stringify(res));
-    }
+    delete res[key];
+
+    this.context.set(res);
   }
 
   get(key: string) {
-    const res = JSON.parse(fs.readFileSync(this.context, "utf-8"));
+    const res = this.context.get();
 
-    if (res[key]) {
-      if (res[key].timestamp > Date.now() - this.ttl) return res[key].data;
-      else this.delete(key);
+    if (res[key] && res[key].timestamp < Date.now() - this.ttl) {
+      this.delete(key);
+      return;
     }
 
-    return;
+    return res[key]?.data;
   }
 
   set(key: string, value: any) {
-    const data = JSON.parse(fs.readFileSync(this.context, "utf-8"));
+    const res = this.context.get();
 
-    fs.writeFileSync(
-      this.context,
-      JSON.stringify(
-        Object.assign(data, {
-          [key]: {
-            data: value,
-            timestamp: Date.now(),
-          },
-        })
-      )
-    );
+    res[key] = { data: value, timestamp: Date.now() };
+
+    this.context.set(res);
   }
 }
